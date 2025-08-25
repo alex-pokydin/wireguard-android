@@ -98,6 +98,25 @@ class TunnelDetailFragment : BaseFragment(), MenuProvider {
         binding ?: return
         binding!!.fragment = this
         onSelectedTunnelChanged(null, selectedTunnel)
+        
+        // Set up connectivity check button
+        binding!!.checkConnectivityButton.setOnClickListener {
+            // Disable button temporarily to prevent spam
+            it.isEnabled = false
+            binding!!.checkConnectivityButton.text = getString(R.string.connectivity_checking)
+            
+            lifecycleScope.launch {
+                try {
+                    selectedTunnel?.checkConnectivityNow()
+                    // Re-enable button after a short delay
+                    kotlinx.coroutines.delay(2000)
+                } finally {
+                    it.isEnabled = true
+                    binding!!.checkConnectivityButton.text = getString(R.string.connectivity_check_now)
+                }
+            }
+        }
+        
         super.onViewStateRestored(savedInstanceState)
     }
 

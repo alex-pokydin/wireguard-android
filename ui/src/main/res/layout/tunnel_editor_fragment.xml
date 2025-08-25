@@ -244,6 +244,18 @@
                                 android:textAlignment="center" />
                         </com.google.android.material.textfield.TextInputLayout>
 
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/dpi_bypass_switch"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_margin="4dp"
+                            android:checked="@={config.interface.dpiBypass}"
+                            android:text="@string/dpi_bypass"
+                            android:layout_marginTop="16dp"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toBottomOf="@id/mtu_label_layout" />
+
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/set_excluded_applications"
                             style="@style/Widget.Material3.Button.TextButton"
@@ -259,7 +271,7 @@
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintEnd_toEndOf="parent"
                             app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@id/mtu_label_layout"
+                            app:layout_constraintTop_toBottomOf="@id/dpi_bypass_switch"
                             app:rippleColor="?attr/colorSecondary"
                             tools:text="4 excluded applications" />
                     </androidx.constraintlayout.widget.ConstraintLayout>

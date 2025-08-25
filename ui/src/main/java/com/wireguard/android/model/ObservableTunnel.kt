@@ -12,6 +12,7 @@ import com.wireguard.android.backend.Statistics
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.android.databinding.Keyed
 import com.wireguard.android.util.applicationScope
+import com.wireguard.android.util.ConnectivityChecker
 import com.wireguard.config.Config
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,7 +52,16 @@ class ObservableTunnel internal constructor(
         private set
 
     override fun onStateChange(newState: Tunnel.State) {
+        val oldState = state
         onStateChanged(newState)
+        
+        // Start/stop connectivity monitoring based on state changes
+        if (newState == Tunnel.State.UP && oldState != Tunnel.State.UP) {
+            connectivity.setConnecting()
+            // Connectivity monitoring will be started by TunnelManager
+        } else if (newState != Tunnel.State.UP && oldState == Tunnel.State.UP) {
+            stopConnectivityMonitoring()
+        }
     }
 
     fun onStateChanged(state: Tunnel.State): Tunnel.State {
@@ -139,6 +149,35 @@ class ObservableTunnel internal constructor(
 
     suspend fun deleteAsync() = manager.delete(this)
 
+    @get:Bindable
+    var connectivity = TunnelConnectivity()
+        private set
+
+    /**
+     * Start monitoring connectivity for this tunnel
+     */
+    fun startConnectivityMonitoring(connectivityChecker: ConnectivityChecker) {
+        connectivity.startMonitoring(connectivityChecker, applicationScope) {
+            // Callback to notify when connectivity changes
+            notifyPropertyChanged(BR.connectivity)
+        }
+        notifyPropertyChanged(BR.connectivity)
+    }
+
+    /**
+     * Stop monitoring connectivity for this tunnel
+     */
+    fun stopConnectivityMonitoring() {
+        connectivity.stopMonitoring()
+        notifyPropertyChanged(BR.connectivity)
+    }
+
+    /**
+     * Trigger an immediate connectivity check
+     */
+    suspend fun checkConnectivityNow() {
+        connectivity.checkNow()
+    }
 
     companion object {
         private const val TAG = "WireGuard/ObservableTunnel"

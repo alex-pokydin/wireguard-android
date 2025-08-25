@@ -59,6 +59,18 @@ object UserKnobs {
             it[RESTORE_ON_BOOT] ?: false
         }
 
+    private val AUTO_ENABLE_DPI_BYPASS = booleanPreferencesKey("auto_enable_dpi_bypass")
+    val autoEnableDpiBypass: Flow<Boolean>
+        get() = Application.getPreferencesDataStore().data.map {
+            it[AUTO_ENABLE_DPI_BYPASS] ?: true  // Default to true for better UX
+        }
+
+    suspend fun setAutoEnableDpiBypass(enable: Boolean) {
+        Application.getPreferencesDataStore().edit {
+            it[AUTO_ENABLE_DPI_BYPASS] = enable
+        }
+    }
+
     private val LAST_USED_TUNNEL = stringPreferencesKey("last_used_tunnel")
     val lastUsedTunnel: Flow<String?>
         get() = Application.getPreferencesDataStore().data.map {

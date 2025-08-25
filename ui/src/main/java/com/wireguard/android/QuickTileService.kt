@@ -169,8 +169,30 @@ class QuickTileService : TileService() {
             }
             else -> {
                 tile.label = tunnel.name
-                tile.state = if (tunnel.state == Tunnel.State.UP) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-                tile.icon = if (tunnel.state == Tunnel.State.UP) iconOn else iconOff
+                
+                // Enhanced tile state based on connectivity
+                when {
+                    tunnel.state != Tunnel.State.UP -> {
+                        tile.state = Tile.STATE_INACTIVE
+                        tile.icon = iconOff
+                        tile.subtitle = null
+                    }
+                    tunnel.connectivity.isHealthy() -> {
+                        tile.state = Tile.STATE_ACTIVE
+                        tile.icon = iconOn
+                        tile.subtitle = tunnel.connectivity.getStatusMessage()
+                    }
+                    tunnel.connectivity.isWarnings() -> {
+                        tile.state = Tile.STATE_ACTIVE
+                        tile.icon = iconOn
+                        tile.subtitle = tunnel.connectivity.getStatusMessage()
+                    }
+                    else -> {
+                        tile.state = Tile.STATE_ACTIVE
+                        tile.icon = iconOn
+                        tile.subtitle = tunnel.connectivity.getStatusMessage()
+                    }
+                }
             }
         }
         tile.updateTile()

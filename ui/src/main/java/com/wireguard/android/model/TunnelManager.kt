@@ -24,7 +24,10 @@ import com.wireguard.android.databinding.ObservableSortedKeyedArrayList
 import com.wireguard.android.util.ErrorMessages
 import com.wireguard.android.util.UserKnobs
 import com.wireguard.android.util.applicationScope
+import com.wireguard.android.util.ConnectivityChecker
 import com.wireguard.config.Config
+import com.wireguard.config.Interface
+import kotlin.random.Random
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +45,7 @@ class TunnelManager(private val configStore: ConfigStore) : BaseObservable() {
     private val context: Context = get()
     private val tunnelMap: ObservableSortedKeyedArrayList<String, ObservableTunnel> = ObservableSortedKeyedArrayList(TunnelComparator)
     private var haveLoaded = false
+    private val connectivityChecker: ConnectivityChecker by lazy { ConnectivityChecker(context) }
 
     private fun addToList(name: String, config: Config?, state: Tunnel.State): ObservableTunnel {
         val tunnel = ObservableTunnel(this, name, config, state)
@@ -56,7 +60,11 @@ class TunnelManager(private val configStore: ConfigStore) : BaseObservable() {
             throw IllegalArgumentException(context.getString(R.string.tunnel_error_invalid_name))
         if (tunnelMap.containsKey(name))
             throw IllegalArgumentException(context.getString(R.string.tunnel_error_already_exists, name))
-        addToList(name, withContext(Dispatchers.IO) { configStore.create(name, config!!) }, Tunnel.State.DOWN)
+        
+        // Enhance the config for better user experience
+        val enhancedConfig = enhanceImportedConfig(config!!)
+        
+        addToList(name, withContext(Dispatchers.IO) { configStore.create(name, enhancedConfig) }, Tunnel.State.DOWN)
     }
 
     suspend fun delete(tunnel: ObservableTunnel) = withContext(Dispatchers.Main.immediate) {
@@ -199,12 +207,21 @@ class TunnelManager(private val configStore: ConfigStore) : BaseObservable() {
         var throwable: Throwable? = null
         try {
             newState = withContext(Dispatchers.IO) { getBackend().setState(tunnel, state, tunnel.getConfigAsync()) }
-            if (newState == Tunnel.State.UP)
+            if (newState == Tunnel.State.UP) {
                 lastUsedTunnel = tunnel
+            }
         } catch (e: Throwable) {
             throwable = e
         }
         tunnel.onStateChanged(newState)
+        
+        // Start/stop connectivity monitoring based on final state
+        if (newState == Tunnel.State.UP) {
+            tunnel.startConnectivityMonitoring(connectivityChecker)
+        } else {
+            tunnel.stopConnectivityMonitoring()
+        }
+        
         saveState()
         if (throwable != null)
             throw throwable
@@ -247,6 +264,60 @@ class TunnelManager(private val configStore: ConfigStore) : BaseObservable() {
 
     suspend fun getTunnelStatistics(tunnel: ObservableTunnel): Statistics = withContext(Dispatchers.Main.immediate) {
         tunnel.onStatisticsChanged(withContext(Dispatchers.IO) { getBackend().getStatistics(tunnel) })!!
+    }
+
+    /**
+     * Enhances imported configurations by automatically enabling useful features.
+     * This improves the user experience by setting up commonly needed options.
+     */
+    private suspend fun enhanceImportedConfig(config: Config): Config {
+        val shouldEnableDpiBypass = UserKnobs.autoEnableDpiBypass.first()
+        val originalInterface = config.getInterface()
+        
+        // Check if we need to modify the interface
+        val needsListenPort = !originalInterface.getListenPort().isPresent()
+        val needsDpiBypass = shouldEnableDpiBypass && !originalInterface.getDpiBypass()
+        
+        if (!needsListenPort && !needsDpiBypass) {
+            return config // No changes needed
+        }
+        
+        // Create enhanced interface
+        val builder = Interface.Builder()
+            .addAddresses(originalInterface.getAddresses())
+            .addDnsServers(originalInterface.getDnsServers())
+            .addDnsSearchDomains(originalInterface.getDnsSearchDomains())
+            .excludeApplications(originalInterface.getExcludedApplications())
+            .includeApplications(originalInterface.getIncludedApplications())
+            .setKeyPair(originalInterface.getKeyPair())
+        
+        // Set MTU if present
+        originalInterface.getMtu().ifPresent { builder.setMtu(it) }
+        
+        // Set or keep existing listen port
+        if (needsListenPort) {
+            // Generate a random port in the dynamic/private range (49152-65535)
+            val randomPort = Random.nextInt(49152, 65536)
+            builder.setListenPort(randomPort)
+            Log.d(TAG, "Auto-assigned ListenPort $randomPort for tunnel with DPI bypass")
+        } else {
+            builder.setListenPort(originalInterface.getListenPort().get())
+        }
+        
+        // Enable DPI bypass if needed and enabled in preferences
+        if (needsDpiBypass) {
+            builder.setDpiBypass(true)
+            Log.d(TAG, "Auto-enabled DPI bypass for imported tunnel")
+        } else {
+            builder.setDpiBypass(originalInterface.getDpiBypass())
+        }
+        
+        // Build new config with enhanced interface
+        val configBuilder = Config.Builder()
+            .setInterface(builder.build())
+            .addPeers(config.getPeers())
+        
+        return configBuilder.build()
     }
 
     companion object {

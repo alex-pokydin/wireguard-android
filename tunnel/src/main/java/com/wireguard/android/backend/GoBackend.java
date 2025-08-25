@@ -23,9 +23,14 @@ import com.wireguard.crypto.Key;
 import com.wireguard.crypto.KeyFormatException;
 import com.wireguard.util.NonNullForAll;
 
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -82,6 +87,76 @@ public final class GoBackend implements Backend {
     private static native int wgTurnOn(String ifName, int tunFd, String settings);
 
     private static native String wgVersion();
+
+    /**
+     * Sends a UDP packet to bypass DPI detection for Russian providers.
+     * This implements the workaround from https://gist.github.com/httpsx/76a98ea28e6f3a4ffc947e768c0b6c01
+     * 
+     * @param config The WireGuard configuration
+     * @throws Exception if the UDP packet cannot be sent
+     */
+    private void sendDpiBypassPacket(final Config config) throws Exception {
+        if (!config.getInterface().getDpiBypass()) {
+            return; // DPI bypass is not enabled
+        }
+
+        final Optional<Integer> listenPortOpt = config.getInterface().getListenPort();
+        if (!listenPortOpt.isPresent()) {
+            Log.w(TAG, "DPI bypass enabled but no ListenPort specified - skipping");
+            return;
+        }
+
+        final int listenPort = listenPortOpt.get();
+        
+        // Send a UDP packet to each peer endpoint
+        for (final Peer peer : config.getPeers()) {
+            final InetEndpoint endpoint = peer.getEndpoint().orElse(null);
+            if (endpoint == null) {
+                continue;
+            }
+
+            final InetAddress endpointAddress;
+            try {
+                final Optional<InetEndpoint> resolvedEndpoint = endpoint.getResolved();
+                if (resolvedEndpoint.isPresent()) {
+                    endpointAddress = InetAddress.getByName(resolvedEndpoint.get().getHost());
+                } else {
+                    endpointAddress = null;
+                }
+            } catch (final Exception e) {
+                Log.w(TAG, "Failed to resolve endpoint for DPI bypass: " + e.getMessage());
+                continue;
+            }
+            
+            if (endpointAddress == null) {
+                Log.w(TAG, "Could not resolve endpoint for DPI bypass: " + endpoint.getHost());
+                continue;
+            }
+
+            final int endpointPort = endpoint.getPort();
+            
+            try {
+                // Create the magic UDP packet containing ":)"
+                final byte[] magicPacket = ":)".getBytes(StandardCharsets.US_ASCII);
+                final DatagramPacket packet = new DatagramPacket(
+                    magicPacket, 
+                    magicPacket.length,
+                    endpointAddress,
+                    endpointPort
+                );
+
+                // Send from the specific listen port
+                try (final DatagramSocket socket = new DatagramSocket(listenPort)) {
+                    socket.send(packet);
+                    Log.d(TAG, "DPI bypass packet sent from port " + listenPort + " to " + 
+                          endpointAddress.getHostAddress() + ":" + endpointPort);
+                }
+            } catch (final Exception e) {
+                Log.w(TAG, "Failed to send DPI bypass packet: " + e.getMessage());
+                // Don't throw - this is just a workaround, connection might still work
+            }
+        }
+    }
 
     /**
      * Method to get the names of running tunnels.
@@ -276,6 +351,13 @@ public final class GoBackend implements Backend {
 
             // Build config
             final String goConfig = config.toWgUserspaceString();
+
+            // Send DPI bypass packet if enabled
+            try {
+                sendDpiBypassPacket(config);
+            } catch (final Exception e) {
+                Log.w(TAG, "DPI bypass failed but continuing with connection: " + e.getMessage());
+            }
 
             // Create the vpn tunnel with android API
             final VpnService.Builder builder = service.getBuilder();

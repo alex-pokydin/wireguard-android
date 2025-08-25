@@ -46,6 +46,7 @@ public final class Interface {
     private final KeyPair keyPair;
     private final Optional<Integer> listenPort;
     private final Optional<Integer> mtu;
+    private final boolean dpiBypass;
 
     private Interface(final Builder builder) {
         // Defensively copy to ensure immutability even if the Builder is reused.
@@ -57,6 +58,7 @@ public final class Interface {
         keyPair = Objects.requireNonNull(builder.keyPair, "Interfaces must have a private key");
         listenPort = builder.listenPort;
         mtu = builder.mtu;
+        dpiBypass = builder.dpiBypass;
     }
 
     /**
@@ -95,6 +97,9 @@ public final class Interface {
                 case "privatekey":
                     builder.parsePrivateKey(attribute.getValue());
                     break;
+                case "dpibypass":
+                    builder.parseDpiBypass(attribute.getValue());
+                    break;
                 default:
                     throw new BadConfigException(Section.INTERFACE, Location.TOP_LEVEL,
                             Reason.UNKNOWN_ATTRIBUTE, attribute.getKey());
@@ -115,7 +120,8 @@ public final class Interface {
                 && includedApplications.equals(other.includedApplications)
                 && keyPair.equals(other.keyPair)
                 && listenPort.equals(other.listenPort)
-                && mtu.equals(other.mtu);
+                && mtu.equals(other.mtu)
+                && dpiBypass == other.dpiBypass;
     }
 
     /**
@@ -195,6 +201,15 @@ public final class Interface {
         return mtu;
     }
 
+    /**
+     * Returns whether DPI bypass is enabled for this interface.
+     *
+     * @return true if DPI bypass is enabled, false otherwise
+     */
+    public boolean getDpiBypass() {
+        return dpiBypass;
+    }
+
     @Override
     public int hashCode() {
         int hash = 1;
@@ -205,6 +220,7 @@ public final class Interface {
         hash = 31 * hash + keyPair.hashCode();
         hash = 31 * hash + listenPort.hashCode();
         hash = 31 * hash + mtu.hashCode();
+        hash = 31 * hash + Boolean.hashCode(dpiBypass);
         return hash;
     }
 
@@ -244,6 +260,8 @@ public final class Interface {
             sb.append("IncludedApplications = ").append(Attribute.join(includedApplications)).append('\n');
         listenPort.ifPresent(lp -> sb.append("ListenPort = ").append(lp).append('\n'));
         mtu.ifPresent(m -> sb.append("MTU = ").append(m).append('\n'));
+        if (dpiBypass)
+            sb.append("DpiBypass = true").append('\n');
         sb.append("PrivateKey = ").append(keyPair.getPrivateKey().toBase64()).append('\n');
         return sb.toString();
     }
@@ -279,6 +297,8 @@ public final class Interface {
         private Optional<Integer> listenPort = Optional.empty();
         // Defaults to not present.
         private Optional<Integer> mtu = Optional.empty();
+        // Defaults to false.
+        private boolean dpiBypass = false;
 
         public Builder addAddress(final InetNetwork address) {
             addresses.add(address);
@@ -399,6 +419,10 @@ public final class Interface {
             }
         }
 
+        public Builder parseDpiBypass(final String dpiBypass) throws BadConfigException {
+            return setDpiBypass(Boolean.parseBoolean(dpiBypass));
+        }
+
         public Builder setKeyPair(final KeyPair keyPair) {
             this.keyPair = keyPair;
             return this;
@@ -417,6 +441,11 @@ public final class Interface {
                 throw new BadConfigException(Section.INTERFACE, Location.LISTEN_PORT,
                         Reason.INVALID_VALUE, String.valueOf(mtu));
             this.mtu = mtu == 0 ? Optional.empty() : Optional.of(mtu);
+            return this;
+        }
+
+        public Builder setDpiBypass(final boolean dpiBypass) {
+            this.dpiBypass = dpiBypass;
             return this;
         }
     }

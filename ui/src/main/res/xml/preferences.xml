@@ -44,5 +44,12 @@
         android:summaryOff="@string/allow_remote_control_intents_summary_off"
         android:summaryOn="@string/allow_remote_control_intents_summary_on"
         android:title="@string/allow_remote_control_intents_title" />
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="auto_enable_dpi_bypass"
+        android:singleLineTitle="false"
+        android:summaryOff="@string/auto_enable_dpi_bypass_summary_off"
+        android:summaryOn="@string/auto_enable_dpi_bypass_summary_on"
+        android:title="@string/auto_enable_dpi_bypass_title" />
     <com.wireguard.android.preference.DonatePreference android:singleLineTitle="false" />
 </androidx.preference.PreferenceScreen>

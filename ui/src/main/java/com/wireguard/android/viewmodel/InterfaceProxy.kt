@@ -54,6 +54,13 @@ class InterfaceProxy : BaseObservable, Parcelable {
         }
 
     @get:Bindable
+    var dpiBypass: Boolean = false
+        set(value) {
+            field = value
+            notifyPropertyChanged(BR.dpiBypass)
+        }
+
+    @get:Bindable
     var privateKey: String = ""
         set(value) {
             field = value
@@ -77,6 +84,7 @@ class InterfaceProxy : BaseObservable, Parcelable {
         listenPort = parcel.readString() ?: ""
         mtu = parcel.readString() ?: ""
         privateKey = parcel.readString() ?: ""
+        dpiBypass = parcel.readByte() != 0.toByte()
     }
 
     constructor(other: Interface) {
@@ -87,6 +95,7 @@ class InterfaceProxy : BaseObservable, Parcelable {
         includedApplications.addAll(other.includedApplications)
         listenPort = other.listenPort.map { it.toString() }.orElse("")
         mtu = other.mtu.map { it.toString() }.orElse("")
+        dpiBypass = other.dpiBypass
         val keyPair = other.keyPair
         privateKey = keyPair.privateKey.toBase64()
     }
@@ -112,6 +121,7 @@ class InterfaceProxy : BaseObservable, Parcelable {
         if (listenPort.isNotEmpty()) builder.parseListenPort(listenPort)
         if (mtu.isNotEmpty()) builder.parseMtu(mtu)
         if (privateKey.isNotEmpty()) builder.parsePrivateKey(privateKey)
+        builder.setDpiBypass(dpiBypass)
         return builder.build()
     }
 
@@ -123,6 +133,7 @@ class InterfaceProxy : BaseObservable, Parcelable {
         dest.writeString(listenPort)
         dest.writeString(mtu)
         dest.writeString(privateKey)
+        dest.writeByte(if (dpiBypass) 1 else 0)
     }
 
     private class InterfaceProxyCreator : Parcelable.Creator<InterfaceProxy> {

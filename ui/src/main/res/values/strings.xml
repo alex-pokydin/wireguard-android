@@ -67,6 +67,9 @@
     <string name="allow_remote_control_intents_title">Allow remote control apps</string>
     <string name="allowed_ips">Allowed IPs</string>
     <string name="app_name" translatable="false">WireGuard</string>
+    <string name="auto_enable_dpi_bypass_title">Auto-enable DPI bypass</string>
+    <string name="auto_enable_dpi_bypass_summary_on">New tunnels will automatically have DPI bypass enabled with random ListenPort</string>
+    <string name="auto_enable_dpi_bypass_summary_off">New tunnels will use original configuration without modifications</string>
     <string name="bad_config_context">%1$s\'s %2$s</string>
     <string name="bad_config_context_top_level">%s</string>
     <string name="bad_config_error">%1$s in %2$s</string>
@@ -118,7 +121,9 @@
     <string name="disable_config_export_description">Disabling config exporting makes private keys less accessible</string>
     <string name="dns_servers">DNS servers</string>
     <string name="dns_search_domains">Search domains</string>
+    <string name="dpi_bypass">DPI Bypass (for Russian ISPs)</string>
     <string name="edit">Edit</string>
+    <string name="enabled">Enabled</string>
     <string name="endpoint">Endpoint</string>
     <string name="error_down">Error bringing down tunnel: %s</string>
     <string name="error_fetching_apps">Error fetching apps list: %s</string>
@@ -260,4 +265,18 @@
     <string name="biometric_prompt_private_key_title">Authenticate to view private key</string>
     <string name="biometric_auth_error">Authentication failure</string>
     <string name="biometric_auth_error_reason">Authentication failure: %s</string>
+    
+    <!-- Connectivity Status Strings -->
+    <string name="connectivity_status">Connection Status</string>
+    <string name="connectivity_healthy">Connected and working</string>
+    <string name="connectivity_connecting">Connecting...</string>
+    <string name="connectivity_disconnected">Disconnected</string>
+    <string name="connectivity_issues">Connection issues detected</string>
+    <string name="connectivity_blocked">VPN may be blocked</string>
+    <string name="connectivity_no_internet">No internet access</string>
+    <string name="connectivity_check_now">Check Connection</string>
+    <string name="connectivity_last_check">Last checked: %s</string>
+    <string name="connectivity_checking">Checking connection...</string>
+    <string name="connectivity_latency">%d ms</string>
+    <string name="connectivity_detailed_status">%1$s • %2$s</string>
 </resources>

@@ -40,17 +40,34 @@
         android:paddingHorizontal="16dp"
         android:paddingVertical="8dp">
 
-        <TextView
-            android:id="@+id/tunnel_name"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentStart="true"
             android:layout_centerVertical="true"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="@{key}"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            tools:text="@sample/interface_names.json/names/names/name" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tunnel_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@{key}"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                tools:text="@sample/interface_names.json/names/names/name" />
+
+            <TextView
+                android:id="@+id/connectivity_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@{item.connectivity.getStatusMessage()}"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@{item.connectivity.getStatusColor()}"
+                android:visibility="@{item.state == State.UP ? android.view.View.VISIBLE : android.view.View.GONE}"
+                tools:text="Connected (45ms)" />
+        </LinearLayout>
 
         <com.wireguard.android.widget.ToggleSwitch
             android:id="@+id/tunnel_switch"
