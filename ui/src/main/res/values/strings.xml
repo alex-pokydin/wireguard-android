@@ -68,8 +68,8 @@
     <string name="allowed_ips">Allowed IPs</string>
     <string name="app_name" translatable="false">WireGuard</string>
     <string name="auto_enable_dpi_bypass_title">Auto-enable DPI bypass</string>
-    <string name="auto_enable_dpi_bypass_summary_on">New tunnels will automatically have DPI bypass enabled with random ListenPort</string>
-    <string name="auto_enable_dpi_bypass_summary_off">New tunnels will use original configuration without modifications</string>
+    <string name="auto_enable_dpi_bypass_summary_on">New tunnels will automatically have DPI bypass enabled</string>
+    <string name="auto_enable_dpi_bypass_summary_off">DPI bypass disabled (connection may fail in restricted regions)</string>
     <string name="bad_config_context">%1$s\'s %2$s</string>
     <string name="bad_config_context_top_level">%s</string>
     <string name="bad_config_error">%1$s in %2$s</string>

@@ -89,13 +89,17 @@ public final class GoBackend implements Backend {
     private static native String wgVersion();
 
     /**
-     * Sends a UDP packet to bypass DPI detection for Russian providers.
-     * This implements the workaround from https://gist.github.com/httpsx/76a98ea28e6f3a4ffc947e768c0b6c01
+     * Sends multiple random UDP packets to bypass DPI detection.
+     * This implements enhanced workaround from https://gist.github.com/httpsx/76a98ea28e6f3a4ffc947e768c0b6c01
+     * 
+     * Sends 6 packets of random data with varying sizes (128-1400 bytes) to evade DPI.
+     * Pure random data is impossible for DPI systems to fingerprint or block.
      * 
      * @param config The WireGuard configuration
+     * @param service The VPN service for socket protection
      * @throws Exception if the UDP packet cannot be sent
      */
-    private void sendDpiBypassPacket(final Config config) throws Exception {
+    private void sendDpiBypassPacket(final Config config, final VpnService service) throws Exception {
         if (!config.getInterface().getDpiBypass()) {
             return; // DPI bypass is not enabled
         }
@@ -108,7 +112,21 @@ public final class GoBackend implements Backend {
 
         final int listenPort = listenPortOpt.get();
         
-        // Send a UDP packet to each peer endpoint
+        // Generate random payloads of varying sizes (aggressive approach for maximum reliability)
+        // Sizes: 128, 256, 512, 768, 1024, 1400 bytes (near-MTU)
+        final byte[][] payloadPatterns = new byte[][] {
+            generateRandomPayload(128),
+            generateRandomPayload(256),
+            generateRandomPayload(512),
+            generateRandomPayload(768),
+            generateRandomPayload(1024),
+            generateRandomPayload(1400)  // Near MTU size
+        };
+        
+        final int burstDelayMs = 10;  // Delay between packets
+        final int postBypassDelayMs = 150;  // Delay before WireGuard handshake
+        
+        // Send packets to each peer endpoint
         for (final Peer peer : config.getPeers()) {
             final InetEndpoint endpoint = peer.getEndpoint().orElse(null);
             if (endpoint == null) {
@@ -135,28 +153,135 @@ public final class GoBackend implements Backend {
 
             final int endpointPort = endpoint.getPort();
             
-            try {
-                // Create the magic UDP packet containing ":)"
-                final byte[] magicPacket = ":)".getBytes(StandardCharsets.US_ASCII);
-                final DatagramPacket packet = new DatagramPacket(
-                    magicPacket, 
-                    magicPacket.length,
-                    endpointAddress,
-                    endpointPort
-                );
-
-                // Send from the specific listen port
-                try (final DatagramSocket socket = new DatagramSocket(listenPort)) {
-                    socket.send(packet);
-                    Log.d(TAG, "DPI bypass packet sent from port " + listenPort + " to " + 
+            // Try multiple port binding strategies for maximum reliability
+            boolean success = false;
+            
+            // Strategy 1: Use configured ListenPort
+            success = sendDpiPacketBurst(endpointAddress, endpointPort, listenPort, 
+                                        payloadPatterns, burstDelayMs, service, true);
+            
+            // Strategy 2: Try with random high port if Strategy 1 fails
+            if (!success) {
+                final int randomPort = 49152 + (int)(Math.random() * 10000);
+                success = sendDpiPacketBurst(endpointAddress, endpointPort, randomPort, 
+                                            payloadPatterns, burstDelayMs, service, false);
+            }
+            
+            // Strategy 3: Try without binding to specific port as last resort
+            if (!success) {
+                success = sendDpiPacketBurst(endpointAddress, endpointPort, 0, 
+                                            payloadPatterns, burstDelayMs, service, false);
+            }
+            
+            if (success) {
+                Log.i(TAG, "DPI bypass: sent " + payloadPatterns.length + " random packets to " + 
                           endpointAddress.getHostAddress() + ":" + endpointPort);
+                
+                // Wait before starting WireGuard handshake to ensure packets arrive first
+                try {
+                    Thread.sleep(postBypassDelayMs);
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
-            } catch (final Exception e) {
-                Log.w(TAG, "Failed to send DPI bypass packet: " + e.getMessage());
-                // Don't throw - this is just a workaround, connection might still work
+            } else {
+                Log.w(TAG, "DPI bypass failed for " + endpoint.getHost() + " (will try WireGuard anyway)");
             }
         }
     }
+    
+    /**
+     * Generates random payload for DPI evasion
+     * 
+     * @param size Size of the payload
+     * @return Random byte array
+     */
+    private byte[] generateRandomPayload(final int size) {
+        final byte[] payload = new byte[size];
+        for (int i = 0; i < size; i++) {
+            payload[i] = (byte)(Math.random() * 256);
+        }
+        return payload;
+    }
+    
+    /**
+     * Sends a burst of UDP packets with random payloads
+     * 
+     * @param address Target address
+     * @param port Target port
+     * @param sourcePort Source port (0 for system-assigned)
+     * @param payloads Array of random payloads to send
+     * @param delayMs Delay between packets
+     * @param service VPN service for socket protection
+     * @param requireExactPort Whether binding to exact port is required
+     * @return true if packets were sent successfully
+     */
+    private boolean sendDpiPacketBurst(final InetAddress address, final int port, 
+                                      final int sourcePort, final byte[][] payloads,
+                                      final int delayMs, final VpnService service, 
+                                      final boolean requireExactPort) {
+        DatagramSocket socket = null;
+        try {
+            // Create socket with or without specific port
+            if (sourcePort > 0) {
+                try {
+                    socket = new DatagramSocket(sourcePort);
+                } catch (final Exception e) {
+                    if (requireExactPort) {
+                        Log.w(TAG, "Failed to bind to port " + sourcePort + ": " + e.getMessage());
+                        return false;
+                    }
+                    // Fall back to system-assigned port
+                    socket = new DatagramSocket();
+                }
+            } else {
+                socket = new DatagramSocket();
+            }
+            
+            // Protect socket through VPN service to ensure it goes through physical interface
+            if (service != null) {
+                service.protect(socket);
+            }
+            
+            // Set socket options for better reliability
+            socket.setSoTimeout(5000);
+            socket.setTrafficClass(0x04); // IPTOS_RELIABILITY
+            
+            // Send all random payloads
+            int successCount = 0;
+            int totalBytes = 0;
+            for (int i = 0; i < payloads.length; i++) {
+                final byte[] payload = payloads[i];
+                try {
+                    final DatagramPacket packet = new DatagramPacket(
+                        payload, payload.length, address, port
+                    );
+                    socket.send(packet);
+                    successCount++;
+                    totalBytes += payload.length;
+                    
+                    // Small delay between packets (except after last one)
+                    if (delayMs > 0 && i < payloads.length - 1) {
+                        Thread.sleep(delayMs);
+                    }
+                } catch (final Exception e) {
+                    Log.w(TAG, "Failed to send packet " + (i+1) + ": " + e.getMessage());
+                }
+            }
+            
+            Log.d(TAG, "Sent " + successCount + "/" + payloads.length + 
+                      " DPI bypass packets (" + totalBytes + " bytes)");
+            return successCount > 0;
+            
+        } catch (final Exception e) {
+            Log.w(TAG, "DPI bypass burst failed: " + e.getMessage());
+            return false;
+        } finally {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        }
+    }
+    
 
     /**
      * Method to get the names of running tunnels.
@@ -352,9 +477,9 @@ public final class GoBackend implements Backend {
             // Build config
             final String goConfig = config.toWgUserspaceString();
 
-            // Send DPI bypass packet if enabled
+            // Send DPI bypass packet if enabled (always uses Moderate mode with smart defaults)
             try {
-                sendDpiBypassPacket(config);
+                sendDpiBypassPacket(config, service);
             } catch (final Exception e) {
                 Log.w(TAG, "DPI bypass failed but continuing with connection: " + e.getMessage());
             }

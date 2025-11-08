@@ -8,6 +8,7 @@ adb install -r -d ui/build/outputs/apk/release/ui-release.apk
 adb logcat | grep WireGuard
 
 # keytool -genkeypair -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-key-alias
+# keytool -genkeypair -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000  -alias wg-key
 
 jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore my-release-key.jks ui/build/outputs/apk/release/ui-release-unsigned.apk wg-key
 
